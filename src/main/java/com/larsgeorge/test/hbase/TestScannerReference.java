@@ -10,16 +10,28 @@ import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import org.apache.log4j.PatternLayout;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 
 public class TestScannerReference {
+
+  private static void printScanMetrics(Scan scan) throws IOException {
+    ByteArrayInputStream bais = new ByteArrayInputStream(
+      scan.getAttribute(Scan.SCAN_ATTRIBUTES_METRICS_DATA));
+    ScanMetrics metrics = new ScanMetrics();
+    metrics.readFields(new DataInputStream(bais));
+    System.out.println("RPC calls: " + metrics.countOfRPCcalls.getCurrentIntervalValue() +
+      " (" + metrics.countOfRPCcalls.getPreviousIntervalValue() + ")");
+    System.out.println("Remote RPC calls: " +
+      metrics.countOfRemoteRPCcalls.getCurrentIntervalValue() + " (" +
+      metrics.countOfRemoteRPCcalls.getPreviousIntervalValue() + ")");
+  }
 
   public static void main(String[] args) throws IOException {
     Logger logger = Logger.getLogger("org.apache.hadoop.hbase");
@@ -49,6 +61,11 @@ public class TestScannerReference {
       if (count1 == 10) {
         System.out.println("Closing table #1...");
         table1.close();
+        // HConnectionManager.deleteStaleConnection(conn);
+        HConnectionManager.deleteAllConnections();
+        HConnectionManager.deleteAllConnections();
+        HConnectionManager.deleteAllConnections();
+        HConnectionManager.deleteAllConnections();
         HConnectionManager.deleteAllConnections();
         System.out.println("Connection closed: " + conn.isClosed());
       }
@@ -56,28 +73,33 @@ public class TestScannerReference {
     }
     System.out.println("Connection closed: " + conn.isClosed());
     scanner1.close();
+    HConnectionManager.deleteAllConnections();
     System.out.println("Connection closed: " + conn.isClosed());
-    System.out.println("Scan metrics: " + Bytes.toString(scan1.getAttribute(
-      Scan.SCAN_ATTRIBUTES_METRICS_DATA)));
+    printScanMetrics(scan1);
 
     System.out.println("Creating table pool...");
-    HTablePool pool = new HTablePool(conf, 1);
+    HTablePool pool = new HTablePool(conf, 5);
     HTableInterface table2 = pool.getTable("testtable");
 
     System.out.println("Scanning table #2...");
     Scan scan2 = new Scan();
+    scan2.setAttribute(Scan.SCAN_ATTRIBUTES_METRICS_ENABLE, Bytes.toBytes(true));
     scan2.setCaching(1);
-    ResultScanner scanner2 = table1.getScanner(scan1);
+    ResultScanner scanner2 = table2.getScanner(scan2);
     int count2 = 0;
-    for (Result res : scanner1) {
+    for (Result res : scanner2) {
       System.out.println(res);
       if (count2 == 10) {
         System.out.println("Closing table #2...");
         table2.close();
+        System.out.println("Connection closed: " + conn.isClosed());
       }
       count2++;
     }
+    System.out.println("Connection closed: " + conn.isClosed());
     scanner2.close();
+    HConnectionManager.deleteAllConnections();
+    System.out.println("Connection closed: " + conn.isClosed());
+    printScanMetrics(scan2);
   }
-
 }
