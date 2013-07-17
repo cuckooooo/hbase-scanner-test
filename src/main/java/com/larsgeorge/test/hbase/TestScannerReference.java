@@ -51,7 +51,7 @@ public class TestScannerReference {
     helper.dropTable("testtable");
     helper.createTable("testtable", "cf1");
     System.out.println("Adding rows to table...");
-    helper.fillTable("testtable", 1, 30, 5, 2, false, "cf1");
+    helper.fillTable("testtable", 1, 50, 5, 2, false, "cf1");
     helper.close(); // decrease connection refcount
 
     System.out.println("=============== TEST 1 - Using HTable ==============");
@@ -88,8 +88,10 @@ public class TestScannerReference {
     System.out.println("=============== TEST 2 - Using HTablePool ==============");
 
     System.out.println("Creating table pool...");
-    HTablePool pool = new HTablePool(conf, 5);
-    HTableInterface table2 = pool.getTable("testtable");
+    HTablePool pool = new HTablePool(conf, 2);
+    HTableInterface table2a = pool.getTable("testtable");
+    HTableInterface table2b = pool.getTable("testtable");
+    HTableInterface table2c = pool.getTable("testtable");
 
     HConnection conn2 = HConnectionManager.getConnection(conf); // increases refcount
     HConnectionManager.deleteConnection(conf); // decrease refcount, still a valid object reference
@@ -97,16 +99,32 @@ public class TestScannerReference {
     Scan scan2 = new Scan();
     scan2.setAttribute(Scan.SCAN_ATTRIBUTES_METRICS_ENABLE, Bytes.toBytes(true));
     scan2.setCaching(1);
-    ResultScanner scanner2 = table2.getScanner(scan2);
+    ResultScanner scanner2 = table2c.getScanner(scan2);
     try {
       System.out.println("Scanning table #2...");
       int count2 = 0;
       for (Result res : scanner2) {
         System.out.println(res);
         if (count2 == 9) {
+          System.out.println("Current pool size: " + pool.getCurrentPoolSize("testtable"));
           System.out.println("Closing table #2...");
-          table2.close();
+          table2c.close();
           System.out.println("Connection closed: " + conn2.isClosed());
+          System.out.println("Current pool size: " + pool.getCurrentPoolSize("testtable"));
+        }
+        if (count2 == 19) {
+          System.out.println("Current pool size: " + pool.getCurrentPoolSize("testtable"));
+          System.out.println("Returning all tables...");
+          table2a.close();
+          table2b.close();
+          System.out.println("Connection closed: " + conn2.isClosed());
+          System.out.println("Current pool size: " + pool.getCurrentPoolSize("testtable"));
+        }
+        if (count2 == 29) {
+          System.out.println("Closing table pool...");
+          pool.close();
+          System.out.println("Connection closed: " + conn2.isClosed());
+          System.out.println("Current pool size: " + pool.getCurrentPoolSize("testtable"));
         }
         count2++;
       }
