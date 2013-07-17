@@ -30,6 +30,10 @@ public class HBaseHelper {
     return new HBaseHelper(conf);
   }
 
+  public void close() throws IOException {
+    admin.close();
+  }
+
   public boolean existsTable(String table)
   throws IOException {
     return admin.tableExists(table);
